@@ -9,6 +9,7 @@ using Microsoft.Framework.DependencyInjection.Fallback;
 using Microsoft.AspNet.PipelineCore;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Linq;
 
 namespace Microsoft.AspNet.Http.Extensions.Tests
 {
@@ -39,7 +40,6 @@ namespace Microsoft.AspNet.Http.Extensions.Tests
         {
             var services = new ServiceCollection()
                 .AddScoped<ITestService, TestService>()
-                .AddTransient<ITypeActivator, TypeActivator>()
                 .BuildServiceProvider();
             var builder = new ApplicationBuilder(services);
 
@@ -102,7 +102,6 @@ namespace Microsoft.AspNet.Http.Extensions.Tests
         {
             var services = new ServiceCollection()
                 .AddScoped<ITestService, TestService>()
-                .AddTransient<ITypeActivator, TypeActivator>()
                 .BuildServiceProvider();
             var builder = new ApplicationBuilder(services);
             builder.UseMiddleware<TestMiddleware>();
@@ -114,6 +113,43 @@ namespace Microsoft.AspNet.Http.Extensions.Tests
             var testService = ctx1.Items[typeof(ITestService)];
             Assert.IsType<TestService>(testService);
         }
+
+        [Fact]
+        public async Task UseMiddlewareCanActivateWithoutCustomActivator()
+        {
+            var services = new ServiceCollection()
+                .AddScoped<ITestService, TestService>()
+                .BuildServiceProvider();
+            var builder = new ApplicationBuilder(services);
+            builder.UseMiddleware<TestActivatorMiddleware>();
+            var app = builder.Build();
+
+            var ctx1 = new DefaultHttpContext();
+            await app(ctx1);
+
+            var testService = ctx1.Items[typeof(ITestService)];
+            var castService = Assert.IsType<TestService>(testService);
+            Assert.False(castService.IsCustomized);
+        }
+
+        [Fact]
+        public async Task UseMiddlewareCanActivateWithCustomActivator()
+        {
+            var services = new ServiceCollection()
+                .AddScoped<ITestService, TestService>()
+                .AddTransient<IMiddlewareActivator, TestActivator>()
+                .BuildServiceProvider();
+            var builder = new ApplicationBuilder(services);
+            builder.UseMiddleware<TestActivatorMiddleware>();
+            var app = builder.Build();
+
+            var ctx1 = new DefaultHttpContext();
+            await app(ctx1);
+
+            var testService = ctx1.Items[typeof(ITestService)];
+            var castService = Assert.IsType<TestService>(testService);
+            Assert.True(castService.IsCustomized);
+        }
     }
 
     public interface ITestService
@@ -122,6 +158,7 @@ namespace Microsoft.AspNet.Http.Extensions.Tests
 
     public class TestService : ITestService
     {
+        public bool IsCustomized { get; set; }
     }
 
     public class TestMiddleware 
@@ -136,6 +173,40 @@ namespace Microsoft.AspNet.Http.Extensions.Tests
         public async Task Invoke(HttpContext context, ITestService testService)
         {
             context.Items[typeof(ITestService)] = testService;
+        }
+    }
+
+    public class TestActivatorMiddleware
+    {
+        private readonly ITestService _testService;
+
+        public TestActivatorMiddleware(RequestDelegate next, ITestService testService)
+        {
+            _testService = testService;
+        }
+
+        public async Task Invoke(HttpContext context)
+        {
+            context.Items[typeof(ITestService)] = _testService;
+        }
+    }
+
+    public class TestActivator : IMiddlewareActivator
+    {
+        private readonly IServiceProvider _provider;
+
+        public TestActivator(IServiceProvider provider)
+        {
+            _provider = provider;
+        }
+
+        public object CreateInstance(Type middlewareType, object[] parameters)
+        {
+            var testService = new TestService();
+            testService.IsCustomized = true;
+
+            return ActivatorUtilities.CreateInstance(
+                _provider, middlewareType, parameters.Concat(new[] { testService }).ToArray());
         }
     }
 }

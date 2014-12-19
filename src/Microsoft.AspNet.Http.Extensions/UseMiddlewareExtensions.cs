@@ -22,8 +22,19 @@ namespace Microsoft.AspNet.Builder
             var applicationServices = builder.ApplicationServices;
             return builder.Use(next =>
             {
-                var typeActivator = applicationServices.GetRequiredService<ITypeActivator>();
-                var instance = typeActivator.CreateInstance(builder.ApplicationServices, middleware, new[] { next }.Concat(args).ToArray());
+                var ctorArgs = new[] { next }.Concat(args).ToArray();
+                var activator = applicationServices.GetService<IMiddlewareActivator>();
+                object instance;
+
+                if (activator != null)
+                {
+                    instance = activator.CreateInstance(middleware, ctorArgs);
+                }
+                else
+                {
+                    instance = ActivatorUtilities.CreateInstance(builder.ApplicationServices, middleware, ctorArgs);
+                }
+
                 var methodinfo = middleware.GetMethod("Invoke", BindingFlags.Instance | BindingFlags.Public);
                 var parameters = methodinfo.GetParameters();
                 if (parameters[0].ParameterType != typeof(HttpContext))
