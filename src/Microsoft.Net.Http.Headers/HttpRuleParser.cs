@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved.
+// Copyright (c) Microsoft Open Technologies, Inc. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
@@ -32,6 +32,8 @@ namespace Microsoft.Net.Http.Headers
             "d MMM yyyy H:m:s zzz", // RFC 5322 no day-of-week
             "d MMM yyyy H:m:s", // RFC 5322 no day-of-week, no zone
         };
+        private static readonly int DateFormatsMinLength;
+        private static readonly int DateFormatsMaxLength;
 
         internal const char CR = '\r';
         internal const char LF = '\n';
@@ -73,6 +75,20 @@ namespace Microsoft.Net.Http.Headers
             TokenChars[(byte)'='] = false;
             TokenChars[(byte)'{'] = false;
             TokenChars[(byte)'}'] = false;
+
+            // calculate min and max length of DateFormats entries
+            foreach (var dateFormat in DateFormats)
+            {
+                if (DateFormatsMinLength == 0 || DateFormatsMinLength > dateFormat.Length)
+                {
+                    DateFormatsMinLength = dateFormat.Length;
+                }
+
+                if (DateFormatsMaxLength == 0 || DateFormatsMaxLength < dateFormat.Length)
+                {
+                    DateFormatsMaxLength = dateFormat.Length;
+                }
+            }
         }
 
         internal static bool IsTokenChar(char character)
@@ -241,6 +257,12 @@ namespace Microsoft.Net.Http.Headers
 
         internal static bool TryStringToDate(string input, out DateTimeOffset result)
         {
+            // validate that input appears to at least be a date format entry
+            if (string.IsNullOrWhiteSpace(input) || input.Length < DateFormatsMinLength || input.Length > DateFormatsMaxLength)
+            {
+                return false;
+            }
+
             // Try the various date formats in the order listed above.
             // We should accept a wide verity of common formats, but only output RFC 1123 style dates.
             if (DateTimeOffset.TryParseExact(input, DateFormats, DateTimeFormatInfo.InvariantInfo,
