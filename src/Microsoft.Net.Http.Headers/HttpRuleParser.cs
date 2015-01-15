@@ -89,6 +89,10 @@ namespace Microsoft.Net.Http.Headers
                     DateFormatsMaxLength = dateFormat.Length;
                 }
             }
+            
+            // DateTime formats: H, m, s, and d could all be 2 digits, so add one for each. 
+            // zzz can be 6 digits, so add 3
+            DateFormatsMaxLength += 7;
         }
 
         internal static bool IsTokenChar(char character)
